@@ -7,7 +7,7 @@ module JavaCall
     Base.Experimental.@optlevel 1
 end
 
-export JavaObject, JavaMetaClass,
+export JavaObject, JavaMetaClass, JNIArray,
        jint, jlong, jbyte, jboolean, jchar, jshort, jfloat, jdouble, jvoid,
        JObject, JClass, JMethod, JConstructor, JField, JString,
        JavaRef, JavaLocalRef, JavaGlobalRef, JavaNullRef,
@@ -39,6 +39,7 @@ include("jvm.jl")
 include("core.jl")
 include("convert.jl")
 include("reflect.jl")
+include("jniarray.jl")
 
 Base.@deprecate_binding jnifunc JavaCall.JNI.jniref[]
 
