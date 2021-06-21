@@ -332,7 +332,7 @@ function jnew(T::Symbol, argtypes::Tuple = () , args...)
     if jmethodId == C_NULL
         throw(JavaCallError("No constructor for $T with signature $sig"))
     end
-    return  _jnicall(metaclass(T), jmethodId, JNI.NewObjectA, JavaObject{T}, argtypes, args...)
+    return  _jcall(metaclass(T), jmethodId, JavaObject{T}, argtypes, args...; callmethod=JNI.NewObjectA)
 end
 
 _jcallable(typ::Type{JavaObject{T}}) where T = metaclass(T)
@@ -411,23 +411,6 @@ end
 # JField invoke
 (f::JField)(obj) = jfield(obj, f)
 
-function _jfield(obj, jfieldID::Ptr{Nothing}, fieldType::Type)
-    result = _jnifield(obj, jfieldID, fieldType)
-    result==C_NULL && geterror()
-    return convert_result(fieldType, result)
-end
-
-function _jcall(obj, jmethodId, callmethod, rettype, argtypes, args...)
-    savedArgs, convertedArgs = convert_args(argtypes, args...)
-    GC.@preserve savedArgs begin
-        result = _jnicall(obj, jmethodId, rettype, argtypes, jvalue.(convertedArgs))
-    end
-    deleteref.(filter(x->isa(x,JavaObject),convertedArgs))
-    result==C_NULL && geterror()
-    return convert_result(rettype, result)
-end
-
-#Generate these methods to satisfy ccall's compile time constant requirement
 for (x, name) in [(:Type,             "Object"),
                   (:(Type{jboolean}), "Boolean"),
                   (:(Type{jchar}),    "Char"   ),
@@ -443,17 +426,28 @@ for (x, name) in [(:Type,             "Object"),
         callmethod = :(JNI.$(Symbol(cstr)))
         fieldmethod = :(JNI.$(Symbol(fstr)))
         m = quote
-            function _jnicall(obj::T, jmethodId::Ptr{Nothing}, rettype::$x,
-                            argtypes::Tuple, args) where T <: $t
-                $callmethod(Ptr(obj), jmethodId, Array{JNI.jvalue}(args))
+            function _jfield(obj::T, jfieldID::Ptr{Nothing}, fieldType::$x) where T <: $t
+                result = $fieldmethod(Ptr(obj), jfieldID)
+                result==C_NULL && geterror()
+                return convert_result(fieldType, result)
             end
-            function _jnifield(obj::T, jfieldID::Ptr{Nothing}, fieldType::$x) where T <: $t
-                $fieldmethod(Ptr(obj), jfieldID)
+            function _jcall(obj::T, jmethodId::Ptr{Nothing}, rettype::$x,
+                            argtypes::Tuple, args...; callmethod=$callmethod) where T <: $t
+                savedArgs, convertedArgs = convert_args(argtypes, args...)
+                GC.@preserve savedArgs begin
+                    result = callmethod(Ptr(obj), jmethodId, Array{JNI.jvalue}(jvalue.(convertedArgs)))
+                end
+                cleanup_arg.(convertedArgs)
+                result==C_NULL && geterror()
+                return convert_result(rettype, result)
             end
         end
         eval(m)
     end
 end
+
+cleanup_arg(arg) = nothing
+cleanup_arg(arg::JavaObject) = deleteref(arg)
 
 global const _jmc_cache = [ Dict{Symbol, JavaMetaClass}() ]
 

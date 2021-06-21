@@ -96,7 +96,7 @@ end
 @testset "null_1" begin
     H=@jimport java.util.HashMap
     a=jcall(T, "testNull", H, ())
-    @test_throws ErrorException jcall(a, "toString", JString, ())
+    @test_throws JavaCall.JavaCallError jcall(a, "toString", JString, ())
 
     jlist = @jimport java.util.ArrayList
     @test jcall( jlist(), "add", jboolean, (JObject,), JObject(C_NULL)) === 0x01
